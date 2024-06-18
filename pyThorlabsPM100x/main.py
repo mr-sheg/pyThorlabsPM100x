@@ -1,19 +1,21 @@
 import os
+
 import PyQt5
 
 dirname = os.path.dirname(PyQt5.__file__)
 plugin_path = os.path.join(dirname, "plugins", "platforms")
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = plugin_path
-import PyQt5.QtWidgets as Qt  # QApplication, QWidget, QMainWindow, QPushButton, QHBoxLayout
-import PyQt5.QtGui as QtGui
-import PyQt5.QtCore as QtCore
+import argparse
 import logging
 import sys
-import argparse
 
 import abstract_instrument_interface
-import pyThorlabsPM100x.driver_virtual
+import PyQt5.QtCore as QtCore
+import PyQt5.QtGui as QtGui
+import PyQt5.QtWidgets as Qt  # QApplication, QWidget, QMainWindow, QPushButton, QHBoxLayout
+
 import pyThorlabsPM100x.driver
+import pyThorlabsPM100x.driver_virtual
 from pyThorlabsPM100x.plots import PlotObject
 
 graphics_dir = os.path.join(os.path.dirname(__file__), "graphics")

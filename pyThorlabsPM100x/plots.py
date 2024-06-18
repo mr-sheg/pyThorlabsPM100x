@@ -1,11 +1,12 @@
 ### v0.1 (2022-02-15)
 
 
-import PyQt5.QtWidgets as Qt  # QApplication, QWidget, QMainWindow, QPushButton, QHBoxLayout
-import PyQt5.QtGui as QtGui
-import PyQt5.QtCore as QtCore
-import pyqtgraph as pg
 import logging
+
+import PyQt5.QtCore as QtCore
+import PyQt5.QtGui as QtGui
+import PyQt5.QtWidgets as Qt  # QApplication, QWidget, QMainWindow, QPushButton, QHBoxLayout
+import pyqtgraph as pg
 
 
 class PlotObject:

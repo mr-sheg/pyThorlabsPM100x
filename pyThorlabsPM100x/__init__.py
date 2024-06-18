@@ -4,4 +4,4 @@ import importlib.util
 package_name = "PyQt5"
 spec = importlib.util.find_spec(package_name)
 if spec:
-    from .main import interface, gui
+    from .main import gui, interface
