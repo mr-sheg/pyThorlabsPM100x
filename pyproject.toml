@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "pythorpm"
+version = "0.1"
+authors = [{ name = "Guillaume Sheehy", email = "guillaume.sheehy@polymtl.ca" }]
+dependencies = [
+    "pyvisa_py",
+    "pyusb",
+    "abstract_instrument_interface",
+    "PyQt5",
+    "pyqtgraph",
+    "numpy",
+]
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+where = ["src"]
