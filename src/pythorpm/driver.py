@@ -1,13 +1,16 @@
-import math
-import time
+import pyvisa as visa
 
 
 class ThorlabsPM100x:
 
-    # The list model_identifiers is used to identify a device as valid one, and to detect its model.
+    # The list model_identifiers is used to identify a device as a Thorlabs console, and to detect its model.
     # Each element of the list is a list of two strings. If the second string is contained in the device identity (i.e. the answer to '*IDN?')
     # then the model device is given by the first string
-    model_identifiers = [["PM100D", "Thorlabs,PM100D"], ["PM100A", "Thorlabs,PM100A"]]
+    model_identifiers = [
+        ["PM100D", "Thorlabs,PM100D"],
+        ["PM100A", "Thorlabs,PM100A"],
+        ["PM100USB", "Thorlabs,PM100USB"],
+    ]
 
     def __init__(self, model=None):
         if model:
@@ -17,17 +20,18 @@ class ThorlabsPM100x:
                     "The specified model is not supported. Supported models are "
                     + ", ".join(models_supported)
                 )
+        self.rm = visa.ResourceManager()
         self.connected = False
         self.model = None  # model of the device currently connected.
         self.model_user = model  # model specified by user. This variable is only used if the user specified a specific model
         self.being_zeroed = 0  # This flag is set to 1 while the powermeter is being zeroed, in order to temporarly stop any power reading
         self._wavelength = None
-        self._auto_power_range = False  # None # boolean variable, True if the powermeter has the auto power range ON, False otherwise
-        self._power_range = 1e-3  # None
+        self._auto_power_range = None  # boolean variable, True if the powermeter has the auto power range ON, False otherwise
+        self._power_range = None
         self._power = None
         self._power_units = None
-        self._min_power_range = 1e-4  # None
-        self._max_power_range = 10  # None
+        self._min_power_range = None
+        self._max_power_range = None
 
         # The properties min_wavelength and max_wavelength are defined as 'standard' variables and not
         # via the the @property, because they never change once we are connected to a given powermeter,
@@ -45,19 +49,23 @@ class ThorlabsPM100x:
             A list of all found valid devices. Each element of the list is a list of three strings, in the format [address,identity,model]
 
         """
-        self.list_all_devices = ["virtualdevice1", "virtualdevice2", "virtualdevice3"]
-        self.list_all_devices_idn = [
-            "Thorlabs,PM100A",
-            "Thorlabs,PM100D",
-            "Thorlabs,PM100D",
-        ]  # emulated anser to IDN query
+
+        # This makes sure that the Resource Manager of pyvisa (if it was already initialized) is closed and cleared before looking for available devices
+        # If a device was previously connected but was unplugged/turned off without doing a proper disconnection, it will not show up in the list
+        # of available devices (or it will generate an error when querying with '*IDN?'), unless we first close and clear the rm object.
+        # However, when using this script together with other instruments which depend on pyvisa (e.g. in Ergastirio), this would interfere with other instrument. So for now is commented out
+        # if hasattr(self, 'rm'):
+        #    self.rm.close()
+        #    #self.rm.visalib._registry.clear()
+
+        self.rm = visa.ResourceManager()
+        self.list_all_devices = self.rm.list_resources()
         self.list_valid_devices = []
-        for index, addr in enumerate(self.list_all_devices):
+        for addr in self.list_all_devices:
             if not (addr.startswith("ASRL")):
                 try:
-                    # instrument = self.rm.open_resource(addr)
-                    # idn = instrument.query('*IDN?').strip()
-                    idn = self.list_all_devices_idn[index]
+                    instrument = self.rm.open_resource(addr)
+                    idn = instrument.query("*IDN?").strip()
                     for (
                         model
                     ) in self.model_identifiers:  # sweep over all supported models
@@ -69,9 +77,9 @@ class ThorlabsPM100x:
                             ):  # if the user had specified a specific model, we dont consider any other model
                                 break
                             self.list_valid_devices.append([addr, idn, model[0]])
-                    # instrument.before_close()
-                    # instrument.close()
-                except:  # visa.VisaIOError:
+                    instrument.before_close()
+                    instrument.close()
+                except visa.VisaIOError:
                     pass
         return self.list_valid_devices
 
@@ -80,18 +88,13 @@ class ThorlabsPM100x:
         device_addresses = [dev[0] for dev in self.list_valid_devices]
         if device_addr in device_addresses:
             try:
-                self.instrument = device_addr  # self.rm.open_resource(device_addr)
-                Msg = self.list_all_devices_idn[
-                    device_addresses.index(device_addr)
-                ]  # self.instrument.query('*IDN?')
-                self.device_connected = self.list_all_devices[
-                    device_addresses.index(device_addr)
-                ]
+                self.instrument = self.rm.open_resource(device_addr)
+                Msg = self.instrument.query("*IDN?")
                 for model in self.model_identifiers:
                     if model[0] in Msg:
                         self.model = model[0]
                 ID = 1
-            except:  # visa.VisaIOError:
+            except visa.VisaIOError:
                 Msg = "Error while connecting."
                 ID = 0
         else:
@@ -113,15 +116,14 @@ class ThorlabsPM100x:
     def disconnect_device(self):
         if self.connected == True:
             try:
-                # self.instrument.control_ren(False)  # Disable remote mode
-                # self.instrument.close()
+                self.instrument.control_ren(False)  # Disable remote mode
+                self.instrument.close()
                 ID = 1
                 Msg = "Succesfully disconnected."
             except Exception as e:
                 ID = 0
                 Msg = e
-            if ID == 1:
-                self.connected = False
+            self.connected = False
             return (Msg, ID)
         else:
             raise RuntimeError("Device is already disconnected.")
@@ -132,14 +134,8 @@ class ThorlabsPM100x:
             self._power, self._power_units = None, ""
             raise RuntimeError("No powermeter is currently connected.")
         if self.being_zeroed == 0:
-            if self.device_connected == "virtualdevice1":
-                phase = math.pi / 6
-            if self.device_connected == "virtualdevice2":
-                phase = math.pi / 3
-            if self.device_connected == "virtualdevice3":
-                phase = math.pi
-            Msg1 = math.sin(phase + 2 * math.pi * time.time() / 5) + 1
-            Msg2 = "W"
+            Msg1 = self.instrument.query("measure:power?")
+            Msg2 = self.instrument.query("power:dc:unit?")
             self._power = float(Msg1)
             self._power_units = str(Msg2).strip("\n")
         else:
@@ -155,15 +151,8 @@ class ThorlabsPM100x:
         if not (self.connected):
             self._wavelength = None
             raise RuntimeError("No powermeter is currently connected.")
-        # Msg = self.instrument.query('SENS:CORR:WAV?')
-        # self._wavelength = int(float(Msg))
-        # Here we simulate the fact that different devices might have different wavelength ranges
-        if self.device_connected == "virtualdevice1":
-            self._wavelength = 600
-        if self.device_connected == "virtualdevice2":
-            self._wavelength = 800
-        if self.device_connected == "virtualdevice3":
-            self._wavelength = 1500
+        Msg = self.instrument.query("SENS:CORR:WAV?")
+        self._wavelength = int(float(Msg))
         return self._wavelength
 
     @wavelength.setter
@@ -182,36 +171,26 @@ class ThorlabsPM100x:
             raise ValueError(
                 f"Wavelength must be between {self.min_wavelength} and {self.max_wavelength}."
             )
-        # self.instrument.write('SENS:CORR:WAV ' + str(wl))
+        self.instrument.write("SENS:CORR:WAV " + str(wl))
         self._wavelength = wl
         return self._wavelength
 
     def read_min_max_wavelength(self):
         if not (self.connected):
             raise RuntimeError("No powermeter is currently connected.")
-        # Here we simulate the fact that different devices might have different wavelength ranges
-        if self.device_connected == "virtualdevice1":
-            self.min_wavelength = 400
-            self.max_wavelength = 1000
-        if self.device_connected == "virtualdevice2":
-            self.min_wavelength = 700
-            self.max_wavelength = 1800
-        if self.device_connected == "virtualdevice3":
-            self.min_wavelength = 400
-            self.max_wavelength = 15000
-        # Msg = self.instrument.query('SENS:CORR:WAV? MIN')
-        # self.min_wavelength = int(float(Msg))
-        # Msg = self.instrument.query('SENS:CORR:WAV? MAX')
-        # self.max_wavelength = int(float(Msg))
-        return self.max_wavelength, self.min_wavelength
+        Msg = self.instrument.query("SENS:CORR:WAV? MIN")
+        self.min_wavelength = int(float(Msg))
+        Msg = self.instrument.query("SENS:CORR:WAV? MAX")
+        self.max_wavelength = int(float(Msg))
+        return self.min_wavelength, self.max_wavelength
 
     @property
     def min_power_range(self):
         if not (self.connected):
             self._min_power_range = None
             raise RuntimeError("No powermeter is currently connected.")
-        # Msg = self.instrument.query('POW:DC:RANG? MIN')
-        # self._min_power_range = float(Msg)
+        Msg = self.instrument.query("POW:DC:RANG? MIN")
+        self._min_power_range = float(Msg)
         return self._min_power_range
 
     @property
@@ -219,8 +198,8 @@ class ThorlabsPM100x:
         if not (self.connected):
             self._max_power_range = None
             raise RuntimeError("No powermeter is currently connected.")
-        # Msg = self.instrument.query('POW:DC:RANG? MAX')
-        # self._max_power_range = float(Msg)
+        Msg = self.instrument.query("POW:DC:RANG? MAX")
+        self._max_power_range = float(Msg)
         return self._max_power_range
 
     @property
@@ -228,8 +207,8 @@ class ThorlabsPM100x:
         if not (self.connected):
             self._auto_power_range = None
             raise RuntimeError("No powermeter is currently connected.")
-        # Msg = self.instrument.query('POW:DC:RANG:AUTO?')
-        # self._auto_power_range = bool(int(Msg))
+        Msg = self.instrument.query("POW:DC:RANG:AUTO?")
+        self._auto_power_range = bool(int(Msg))
         return self._auto_power_range
 
     @auto_power_range.setter
@@ -239,7 +218,7 @@ class ThorlabsPM100x:
         if not (type(status) == bool):
             raise TypeError("Value of auto_power_range must be either True or False.")
         string = "ON" if status else "OFF"
-        # self.instrument.write('POW:DC:RANG:AUTO ' + string)
+        self.instrument.write("POW:DC:RANG:AUTO " + string)
         self._auto_power_range = status
         return self._auto_power_range
 
@@ -249,8 +228,8 @@ class ThorlabsPM100x:
         if not (self.connected):
             self._power_range = None
             raise RuntimeError("No powermeter is currently connected.")
-        # Msg = self.instrument.query('POW:DC:RANG?')
-        # self._power_range = float(Msg)
+        Msg = self.instrument.query("POW:DC:RANG?")
+        self._power_range = float(Msg)
         return self._power_range
 
     @power_range.setter
@@ -261,21 +240,21 @@ class ThorlabsPM100x:
             raise TypeError("Value of power_range must be a number.")
         if power < 0:
             raise ValueError("Power must be a positive number.")
-        # self.instrument.write('POW:DC:RANG ' + str(power))
+        self.instrument.write("POW:DC:RANG " + str(power))
         self._power_range = power
         return self._power_range
 
     def set_zero(self):
         ID = 0
         if self.connected:
-            # try:
-            self.being_zeroed = 1
-            # ID = self.instrument.write('sense:correction:collect:zero')
-            self.being_zeroed = 0
-            ID = 1
-        # except visa.VisaIOError:
-        #    ID = 0
-        #    pass
+            try:
+                self.being_zeroed = 1
+                ID = self.instrument.write("sense:correction:collect:zero")
+                self.being_zeroed = 0
+                ID = 1
+            except visa.VisaIOError:
+                ID = 0
+                pass
         return ID
 
     def move_to_next_power_range(self, direction, LastPowerRange=None):

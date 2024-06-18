@@ -14,9 +14,9 @@ import PyQt5.QtCore as QtCore
 import PyQt5.QtGui as QtGui
 import PyQt5.QtWidgets as Qt  # QApplication, QWidget, QMainWindow, QPushButton, QHBoxLayout
 
-import pyThorlabsPM100x.driver
-import pyThorlabsPM100x.driver_virtual
-from pyThorlabsPM100x.plots import PlotObject
+import pythorpm.driver
+import pythorpm.driver_virtual
+from pythorpm.plots import PlotObject
 
 graphics_dir = os.path.join(os.path.dirname(__file__), "graphics")
 
@@ -138,9 +138,9 @@ class interface(abstract_instrument_interface.abstract_interface):
         self.stored_data = []  # List used to store data acquired by device
         ###
         if ("virtual" in kwargs.keys()) and (kwargs["virtual"] == True):
-            self.instrument = pyThorlabsPM100x.driver_virtual.ThorlabsPM100x()
+            self.instrument = pythorpm.driver_virtual.ThorlabsPM100x()
         else:
-            self.instrument = pyThorlabsPM100x.driver.ThorlabsPM100x()
+            self.instrument = pythorpm.driver.ThorlabsPM100x()
         ###
         super().__init__(**kwargs)
         self.refresh_list_devices()
